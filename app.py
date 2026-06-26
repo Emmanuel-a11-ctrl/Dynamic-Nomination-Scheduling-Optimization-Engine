@@ -178,7 +178,7 @@ def generate_nominations(customers: List[Customer], date: datetime) -> List[Nomi
         elif cust.segment == "Industrial Boiler":
             vol_mmbtu = random.uniform(5.0, 20.0)
             pressure = random.choice([100, 250])
-        else:
+        else:  # Cooking Franchise
             vol_mmbtu = random.uniform(0.5, 4.0)
             pressure = 20
         start_hour = random.randint(6, 20)
@@ -293,7 +293,7 @@ class NominationOptimizationEngine:
 
     def _hubs_to_df(self):
         hubs = self.config["hubs"]
-        data = [{'name': name, 'lat': info['lat'], 'lon': info['lon'], 'type': info['type']} 
+        data = [{'name': name, 'lat': info['lat'], 'lon': info['lon'], 'type': info['type']}
                 for name, info in hubs.items()]
         return pd.DataFrame(data)
 
@@ -531,7 +531,7 @@ def main_dashboard():
         fig = go.Figure()
         hubs = CONFIG["hubs"]
         colors = {"mother":"red","auto_hub":"blue","cooking_hub":"green"}
-        sizes = {"mother":25,"auto_hub":30,"cooking_hub":30}
+        sizes = {"mother":25,"auto_hub":"30","cooking_hub":"30"}
         for name, info in hubs.items():
             fig.add_trace(go.Scattermapbox(
                 lat=[info['lat']], lon=[info['lon']],
@@ -614,6 +614,16 @@ def main_dashboard():
         } for c in st.session_state.customers])
         st.dataframe(price_df, use_container_width=True)
 
+        # Trailer Utilization Visualization
+        st.subheader("🚚 Trailer Utilization")
+        trailer_statuses = pd.DataFrame([{'status': t.status} for t in st.session_state.trailers])
+        status_counts = trailer_statuses['status'].value_counts().reset_index()
+        status_counts.columns = ['Status', 'Count']
+
+        fig_trailer = go.Figure(data=[go.Bar(x=status_counts['Status'], y=status_counts['Count'], marker_color=['blue', 'green', 'orange'])])
+        fig_trailer.update_layout(title_text='Current Trailer Status Distribution', xaxis_title='Trailer Status', yaxis_title='Number of Trailers')
+        st.plotly_chart(fig_trailer, use_container_width=True)
+
         if st.session_state.invoices:
             st.subheader("🧾 Invoices")
             inv_df = pd.DataFrame(st.session_state.invoices)
@@ -654,6 +664,7 @@ if __name__ == "__main__":
             print(f"Optimization complete: {result['status']}")
             print(f"Total revenue: ${result['total_revenue_usd']:.2f}")
             print(f"Net margin: ${result['net_margin_usd']:.2f}")
+            print("")
             print("
 Customer prices:")
             for c in customers:
