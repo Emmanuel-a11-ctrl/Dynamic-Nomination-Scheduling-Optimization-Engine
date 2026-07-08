@@ -413,7 +413,7 @@ elif module == "📡 Real-Time Monitor":
             fig.add_trace(go.Scattermapbox(
                 lat=subset['current_lat'], lon=subset['current_lon'],
                 mode='markers+text', marker=dict(size=14, color=color),
-                text=subset['trailer_id'] + " - " + subset['status'] as text,
+                text=subset['trailer_id'] + " - " + subset['status'],
                 name=status
             ))
 
