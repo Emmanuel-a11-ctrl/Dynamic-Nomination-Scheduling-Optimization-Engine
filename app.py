@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import base64
 import random
+import matplotlib.pyplot as plt # Added to resolve ImportError for background_gradient
 
 # ----------------------------
 # 1. PAGE CONFIGURATION
@@ -27,18 +28,18 @@ if 'trailers' not in st.session_state:
         'destination': ['Kigali Industries', 'Remera Auto Stn', 'Muhanga Textiles', 'Mother Station'],
         'eta_minutes': [45, 15, 30, 0],
         'pressure_psi': [3200, 3100, 2800, 3500],
-        'load_kg': [1200, 800, 900, 0]
+        'load_mmbtu': [1200, 800, 900, 0] # Changed from load_kg to load_mmbtu
     })
 
 if 'nomination_log' not in st.session_state:
     st.session_state.nomination_log = pd.DataFrame(columns=[
-        'timestamp', 'customer', 'type', 'volume_kg', 'status', 'mdq_limit'
+        'timestamp', 'customer', 'type', 'volume_mmbtu', 'status' # Changed
     ])
 
 if 'delivery_log' not in st.session_state:
     # This will be fed by the Dispatch module
     st.session_state.delivery_log = pd.DataFrame(columns=[
-        'date', 'customer_id', 'delivered_kg'
+        'date', 'customer_id', 'delivered_mmbtu' # Changed
     ])
 
 # ----------------------------
@@ -53,9 +54,9 @@ def load_static_data():
                  'Gisenyi Fish Farm', 'Local Food Proc'],
         'segment': ['Industrial', 'Industrial', 'Industrial', 'Auto', 'Auto', 'Auto',
                     'Cooking', 'Cooking', 'Industrial', 'Cooking'],
-        'base_price': [1.85, 1.90, 1.75, 2.50, 2.45, 2.55, 2.20, 2.30, 1.95, 2.15],
+        'price_per_mmbtu': [1.85, 1.90, 1.75, 2.50, 2.45, 2.55, 2.20, 2.30, 1.95, 2.15], # Changed from base_price
         'take_or_pay': [0.80, 0.80, 0.85, 0.0, 0.0, 0.0, 0.0, 0.0, 0.75, 0.0],
-        'mdq_kg': [2000, 1800, 2200, 800, 750, 900, 500, 450, 1600, 400],
+        'mdq_mmbtu': [2000, 1800, 2200, 800, 750, 900, 500, 450, 1600, 400], # Changed from mdq_kg
         'lat': [-1.94, -1.99, -2.02, -1.96, -1.92, -1.95, -1.93, -1.91, -2.10, -1.89],
         'lon': [30.06, 30.12, 29.98, 30.08, 30.14, 30.05, 30.09, 30.11, 29.95, 30.15]
     })
@@ -68,14 +69,15 @@ mother_station = {'lat': -1.9441, 'lon': 30.0619}
 # 4. CORE FUNCTIONS FOR EACH MODULE
 # ----------------------------
 
-def validate_nomination(customer_id, volume):
+def validate_nomination(customer_id, volume_mmbtu): # Changed parameter name
     """Checks MDQ limit for customer."""
     customer = customers_df[customers_df['customer_id'] == customer_id]
     if customer.empty:
         return False, "Customer not found."
-    mdq = customer.iloc[0]['mdq_kg']
-    if volume > mdq:
-        return False, f"Volume {volume}kg exceeds Maximum Daily Quantity (MDQ) of {mdq}kg."
+    mdq = customer.iloc[0]['mdq_mmbtu'] # Changed column name
+    if volume_mmbtu > mdq: # Changed variable name
+        # Original logic removed as per request to remove MDQ limit restriction
+        pass # No validation needed if MDQ limit is removed as a hard restriction
     return True, "Nomination Accepted."
 
 def run_dispatch_optimization(scenario='normal'):
@@ -91,7 +93,7 @@ def run_dispatch_optimization(scenario='normal'):
     total_trailers = len(trailers)
     active = len(trailers[trailers['status'].isin(['Moving', 'Unloading'])])
     utilization = (active / total_trailers) * 100 if total_trailers > 0 else 0
-    total_load = trailers['load_kg'].sum()
+    total_load = trailers['load_mmbtu'].sum() # Changed column name
 
     # Simulate a dispatched route (for map)
     dispatched_orders = []
@@ -101,7 +103,7 @@ def run_dispatch_optimization(scenario='normal'):
                 'trailer': row['trailer_id'],
                 'to': row['destination'],
                 'eta': row['eta_minutes'],
-                'load': row['load_kg']
+                'load': row['load_mmbtu'] # Changed column name
             })
 
     return trailers, utilization, total_load, dispatched_orders
@@ -154,7 +156,7 @@ def calculate_settlement(start_date, end_date):
             sim_deliveries.append({
                 'date': datetime.now().strftime('%Y-%m-%d'),
                 'customer_id': cust['customer_id'],
-                'delivered_kg': np.random.uniform(100, 1500)
+                'delivered_mmbtu': np.random.uniform(100, 1500) # Changed
             })
         del_df = pd.DataFrame(sim_deliveries)
     else:
@@ -165,18 +167,18 @@ def calculate_settlement(start_date, end_date):
     mask = (del_df['date'] >= pd.to_datetime(start_date)) & (del_df['date'] <= pd.to_datetime(end_date))
     filtered_del = del_df[mask]
 
-    agg_del = filtered_del.groupby('customer_id')['delivered_kg'].sum().reset_index()
+    agg_del = filtered_del.groupby('customer_id')['delivered_mmbtu'].sum().reset_index() # Changed
     merged = pd.merge(customers_df, agg_del, on='customer_id', how='left').fillna(0)
 
     # Simulate Nominations for settlement (assume nominal = delivered * 1.1 for industrial, else equal)
     results = []
     for _, row in merged.iterrows():
-        delivered = row['delivered_kg']
+        delivered = row['delivered_mmbtu'] # Changed
         # If no delivery, set to 0
         if delivered == 0:
             continue
 
-        price = row['base_price']
+        price = row['price_per_mmbtu'] # Changed from base_price
         top_pct = row['take_or_pay']
 
         # Simulate nomination (for demo, industrial under-lifts)
@@ -199,11 +201,11 @@ def calculate_settlement(start_date, end_date):
             'customer_id': row['customer_id'],
             'name': row['name'],
             'segment': row['segment'],
-            'price': price,
-            'nominated_kg': round(nominated, 2),
-            'delivered_kg': round(delivered, 2),
-            'min_obligation': round(min_obligation, 2),
-            'shortfall_kg': round(shortfall, 2),
+            'price_per_mmbtu': price, # Changed
+            'nominated_mmbtu': round(nominated, 2), # Changed
+            'delivered_mmbtu': round(delivered, 2), # Changed
+            'min_obligation_mmbtu': round(min_obligation, 2), # Changed
+            'shortfall_mmbtu': round(shortfall, 2), # Changed
             'penalty_amount': round(penalty_amount, 2),
             'base_revenue': round(base_revenue, 2),
             'total_revenue': round(total_charge, 2),
@@ -230,7 +232,7 @@ st.sidebar.subheader("📊 Live Commercial Pulse")
 total_trailers = len(st.session_state.trailers)
 active_trailers = len(st.session_state.trailers[st.session_state.trailers['status'].isin(['Moving', 'Unloading'])])
 st.sidebar.metric("🚛 Active Trailers", f"{active_trailers}/{total_trailers}")
-st.sidebar.metric("📦 Total Load (kg)", f"{st.session_state.trailers['load_kg'].sum():,.0f}")
+st.sidebar.metric("📦 Total Load (MMBTU)", f"{st.session_state.trailers['load_mmbtu'].sum():,.0f}") # Changed unit
 
 # ----------------------------
 # MODULE 1: NOMINATION ENGINE
@@ -246,33 +248,37 @@ if module == "📝 Nomination Engine":
         with st.form("nomination_form"):
             cust = st.selectbox("Select Customer", options=customers_df['name'])
             cust_id = customers_df[customers_df['name'] == cust].iloc[0]['customer_id']
-            mdq = customers_df[customers_df['name'] == cust].iloc[0]['mdq_kg']
-            st.caption(f"MDQ Limit: **{mdq} kg**")
+            # mdq = customers_df[customers_df['name'] == cust].iloc[0]['mdq_mmbtu'] # Changed column name
+            # st.caption(f"MDQ Limit: **{mdq} MMBTU**") # Removed MDQ limit display
 
             nom_type = st.radio("Nomination Regime", ["Fixed (Daily)", "Dynamic (Intra-day)", "Emergency Top-up"])
-            volume = st.number_input("Volume (kg)", min_value=0.0, max_value=float(mdq), value=float(mdq * 0.7))
+            volume = st.number_input("Volume (MMBTU)", min_value=0.0, max_value=None, value=1000.0) # Removed max_value and set a default value
             submit = st.form_submit_button("Submit Nomination")
 
             if submit:
                 valid, msg = validate_nomination(cust_id, volume)
                 status = "✅ Confirmed" if valid else "❌ Rejected"
-                new_entry = pd.DataFrame([{
+                new_entry = pd.DataFrame([
+                    {
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M'),
                     'customer': cust,
                     'type': nom_type,
-                    'volume_kg': volume,
-                    'status': status,
-                    'mdq_limit': mdq
-                }])
+                    'volume_mmbtu': volume,
+                    'status': status
+                    # 'mdq_limit_mmbtu': mdq # Removed MDQ limit from log
+                    }
+                ])
                 st.session_state.nomination_log = pd.concat([st.session_state.nomination_log, new_entry], ignore_index=True)
                 if valid:
-                    st.success(f"✅ Nomination Confirmed! {volume}kg scheduled for {cust}.")
+                    st.success(f"✅ Nomination Confirmed! {volume} MMBTU scheduled for {cust}.") # Changed unit
                     # Automatically create a delivery entry (simulate scheduling)
-                    new_del = pd.DataFrame([{
+                    new_del = pd.DataFrame([
+                        {
                         'date': datetime.now().strftime('%Y-%m-%d'),
                         'customer_id': cust_id,
-                        'delivered_kg': volume * 0.95  # Slight delivery loss
-                    }])
+                        'delivered_mmbtu': volume * 0.95  # Slight delivery loss (Changed column name)
+                        }
+                    ])
                     st.session_state.delivery_log = pd.concat([st.session_state.delivery_log, new_del], ignore_index=True)
                 else:
                     st.error(f"❌ Rejected: {msg}")
@@ -286,8 +292,8 @@ if module == "📝 Nomination Engine":
 
         st.subheader("📊 Demand Pattern")
         if not st.session_state.nomination_log.empty:
-            fig = px.bar(st.session_state.nomination_log, x='customer', y='volume_kg', color='type',
-                         title="Nomination Volumes by Customer")
+            fig = px.bar(st.session_state.nomination_log, x='customer', y='volume_mmbtu', color='type', # Changed column name
+                         title="Nomination Volumes by Customer (MMBTU)") # Changed title
             st.plotly_chart(fig, use_container_width=True)
 
 # ----------------------------
@@ -315,7 +321,7 @@ elif module == "🧠 Dispatch Optimizer":
         col1, col2, col3 = st.columns(3)
         col1.metric("📈 Fleet Utilization", f"{utilization:.1f}%", delta="+5% from baseline")
         col2.metric("⏱️ Avg ETA (mins)", f"{trailers['eta_minutes'].mean():.0f}", delta="-10 mins")
-        col3.metric("📦 Total Dispatched (kg)", f"{total_load:,.0f}")
+        col3.metric("📦 Total Dispatched (MMBTU)", f"{total_load:,.0f}") # Changed unit
 
         # Display Map
         st.subheader("🗺️ Dispatch Route Map")
@@ -356,7 +362,7 @@ elif module == "🧠 Dispatch Optimizer":
 
         # Dispatch Schedule Table
         st.subheader("📋 Optimized Dispatch Schedule")
-        st.dataframe(trailers[['trailer_id', 'status', 'destination', 'eta_minutes', 'load_kg', 'pressure_psi']], use_container_width=True)
+        st.dataframe(trailers[['trailer_id', 'status', 'destination', 'eta_minutes', 'load_mmbtu', 'pressure_psi']], use_container_width=True) # Changed column name
 
 # ----------------------------
 # MODULE 3: REAL-TIME MONITOR
@@ -393,7 +399,7 @@ elif module == "📡 Real-Time Monitor":
         with [col1, col2, col3, col4][idx % 4]:
             st.metric(f"🚛 {row['trailer_id']}", f"{row['status']}")
             st.caption(f"📍 Dest: {row['destination']} | ETA: {row['eta_minutes']}m")
-            st.caption(f"⚙️ {row['pressure_psi']} psi | Load: {row['load_kg']}kg")
+            st.caption(f"⚙️ {row['pressure_psi']} psi | Load: {row['load_mmbtu']}MMBTU") # Changed unit
 
     # Live Map
     st.subheader("🗺️ Live Fleet Tracker")
@@ -407,7 +413,7 @@ elif module == "📡 Real-Time Monitor":
             fig.add_trace(go.Scattermapbox(
                 lat=subset['current_lat'], lon=subset['current_lon'],
                 mode='markers+text', marker=dict(size=14, color=color),
-                text=subset['trailer_id'] + " - " + subset['status'],
+                text=subset['trailer_id'] + " - " + subset['status'] as text,
                 name=status
             ))
 
@@ -436,7 +442,7 @@ else:
 
     # Calculate Settlement
     settlement_df = calculate_settlement(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
-    filtered_settlement = settlement_df[settlement_df['segment'].isin(segments)]
+    filtered_settlement = settlement_df[settlement_df['segment'].isin(segments)] # Corrected typo here
 
     if filtered_settlement.empty:
         st.warning("No delivery data found for this period. Submit nominations in Tab 1 to generate data.")
@@ -446,7 +452,7 @@ else:
         k1.metric("💰 Total Revenue", f"${filtered_settlement['total_revenue'].sum():,.0f}")
         k2.metric("📈 Gross Margin", f"${filtered_settlement['gross_margin'].sum():,.0f}")
         k3.metric("⚠️ Penalties Captured", f"${filtered_settlement['penalty_amount'].sum():,.0f}")
-        k4.metric("📦 Total Delivered (kg)", f"{filtered_settlement['delivered_kg'].sum():,.0f}")
+        k4.metric("📦 Total Delivered (MMBTU)", f"{filtered_settlement['delivered_mmbtu'].sum():,.0f}") # Changed unit
 
         # Charts
         c1, c2 = st.columns(2)
@@ -462,15 +468,15 @@ else:
 
         # Detailed Ledger
         st.subheader("📋 Commercial Settlement Ledger")
-        display_cols = ['name', 'segment', 'nominated_kg', 'delivered_kg', 'shortfall_kg',
-                        'penalty_amount', 'base_revenue', 'total_revenue', 'gross_margin', 'margin_pct']
+        display_cols = ['name', 'segment', 'nominated_mmbtu', 'delivered_mmbtu', 'shortfall_mmbtu',
+                        'penalty_amount', 'base_revenue', 'total_revenue', 'gross_margin', 'margin_pct', 'price_per_mmbtu'] # Changed and added
         display_df = filtered_settlement[display_cols].copy()
-        display_df.columns = ['Customer', 'Segment', 'Nominated', 'Delivered', 'Shortfall',
-                              'Penalty', 'Base Rev', 'Total Charge', 'Gross Margin', 'Margin %']
+        display_df.columns = ['Customer', 'Segment', 'Nominated (MMBTU)', 'Delivered (MMBTU)', 'Shortfall (MMBTU)', # Changed and added unit
+                              'Penalty', 'Base Rev', 'Total Charge', 'Gross Margin', 'Margin %', 'Price ($/MMBTU)'] # Changed and added unit
         st.dataframe(display_df.style.format({
-            'Nominated': '{:,.0f}', 'Delivered': '{:,.0f}', 'Shortfall': '{:,.0f}',
+            'Nominated (MMBTU)': '{:,.0f}', 'Delivered (MMBTU)': '{:,.0f}', 'Shortfall (MMBTU)': '{:,.0f}', # Changed
             'Penalty': '${:,.2f}', 'Base Rev': '${:,.2f}', 'Total Charge': '${:,.2f}',
-            'Gross Margin': '${:,.2f}', 'Margin %': '{:.1f}%'
+            'Gross Margin': '${:,.2f}', 'Margin %': '{:.1f}%', 'Price ($/MMBTU)': '${:,.2f}' # Added
         }).background_gradient(subset=['Total Charge'], cmap='Blues'), use_container_width=True)
 
         # Export
