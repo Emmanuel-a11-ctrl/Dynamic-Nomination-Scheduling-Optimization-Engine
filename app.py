@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import base64
 import random
 import matplotlib.pyplot as plt # Added to resolve ImportError for background_gradient
+import io # Added for Excel export
 
 # ----------------------------
 # 1. PAGE CONFIGURATION
@@ -216,6 +217,13 @@ def calculate_settlement(start_date, end_date):
 
     return pd.DataFrame(results)
 
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Settlement Data')
+    processed_data = output.getvalue()
+    return processed_data
+
 # ----------------------------
 # 5. STREAMLIT UI - NAVIGATION
 # ----------------------------
@@ -413,8 +421,7 @@ elif module == "📡 Real-Time Monitor":
             fig.add_trace(go.Scattermapbox(
                 lat=subset['current_lat'], lon=subset['current_lon'],
                 mode='markers+text', marker=dict(size=14, color=color),
-                text=subset['trailer_id'] + " - " + subset['status'],
-                name=status
+                text=subset['trailer_id'] + " - " + subset['status']
             ))
 
     fig.update_layout(
@@ -481,6 +488,13 @@ else:
 
         # Export
         csv = filtered_settlement.to_csv(index=False)
-        b64 = base64.b64encode(csv.encode()).decode()
-        href = f'<a href="data:file/csv;base64,{b64}" download="cng_settlement_report.csv">⬇️ Download Full Settlement CSV</a>'
-        st.markdown(href, unsafe_allow_html=True)
+        b64_csv = base64.b64encode(csv.encode()).decode()
+        href_csv = f'<a href="data:file/csv;base64,{b64_csv}" download="cng_settlement_report.csv">⬇️ Download Full Settlement CSV</a>'
+        st.markdown(href_csv, unsafe_allow_html=True)
+
+        # Export to Excel
+        excel_data = to_excel(filtered_settlement)
+        b64_excel = base64.b64encode(excel_data).decode()
+        href_excel = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64_excel}" download="cng_settlement_report.xlsx">⬇️ Download Full Settlement Excel</a>'
+        st.markdown(href_excel, unsafe_allow_html=True)
+
