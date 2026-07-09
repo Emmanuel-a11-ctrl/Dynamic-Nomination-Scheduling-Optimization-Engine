@@ -4,6 +4,6 @@ numpy
 plotly
 openpyxl
 matplotlib
-prophet==1.1.0
+prophet
 pyngrok
-pystan==2.19.1.1
+pystan
