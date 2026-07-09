@@ -1,0 +1,9 @@
+streamlit
+pandas
+numpy
+plotly
+openpyxl
+matplotlib
+prophet==1.1.0
+pyngrok
+pystan==2.19.1.1
